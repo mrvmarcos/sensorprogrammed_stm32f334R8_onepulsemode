@@ -21,7 +21,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <string.h>
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -31,6 +32,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define SAMPLES 100 //size for our buffer
+
 #define Toggle_LED GPIO_PIN_5
 /* USER CODE END PD */
 
@@ -48,6 +51,13 @@ TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
 
 /* USER CODE BEGIN PV */
+uint16_t adc_samp[SAMPLES];
+// uint16_t convCompleted = 0;
+uint16_t samplesCollected = 0;
+uint32_t sumValues = 0;
+uint32_t sum =0;
+
+
 
 /* USER CODE END PV */
 
@@ -102,10 +112,17 @@ int main(void)
   MX_TIM3_Init();
   MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
+
   HAL_TIM_Base_Start(&htim2);
+
   HAL_TIM_OnePulse_Start(&htim1, TIM_CHANNEL_1);
-  // HAL_TIM_IC_Start_IT(&htim3, TIM_CHANNEL_2);
+
+  HAL_TIM_OC_Start_IT(&htim1, TIM_CHANNEL_1);
+
   HAL_TIM_OnePulse_Start(&htim3, TIM_CHANNEL_1);
+
+  HAL_TIM_OC_Start_IT(&htim3, TIM_CHANNEL_1);
+
 
 
   /* USER CODE END 2 */
@@ -114,6 +131,15 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+	   //Process the converted value stored in rawValues
+//	  for (int i = 0; i < 10; i++){
+//	   uint32_t convertedValue = adc_samp[i];
+
+//	   if (convertedValue > 0) {
+//	   	    sumValues += convertedValue;
+//	    	float average = (float)sumValues / 10;
+	  //}
+	//}
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -313,8 +339,11 @@ static void MX_TIM1_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN TIM1_Init 2 */
-//  __HAL_TIM_ENABLE_IT(&htim1, TIM_IT_UPDATE);            // Enable Timer 1 Update Event interrupt
-//  __HAL_TIM_ENABLE_IT(&htim1, TIM_IT_CC1);               // Enable Timer 1 Channel 1 interrupt
+  __HAL_TIM_ENABLE_IT(&htim1, TIM_IT_UPDATE);            // Enable Timer 1 Update Event interrupt for elapsedPeriodCallback
+  __HAL_TIM_ENABLE_IT(&htim1, TIM_IT_CC1);               // Enable Timer 1 Channel 1 interrupt for elapsedPeriodCallback
+
+  //HAL_NVIC_ClearPendingIRQ(TIM1_IRQn);  // make sure that any pending interrupt is cleared
+  //HAL_NVIC_EnableIRQ(TIM1_IRQn);  // Enable the interrupt
   /* USER CODE END TIM1_Init 2 */
   HAL_TIM_MspPostInit(&htim1);
 
@@ -334,6 +363,7 @@ static void MX_TIM2_Init(void)
 
   TIM_ClockConfigTypeDef sClockSourceConfig = {0};
   TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_IC_InitTypeDef sConfigIC = {0};
 
   /* USER CODE BEGIN TIM2_Init 1 */
 
@@ -353,9 +383,21 @@ static void MX_TIM2_Init(void)
   {
     Error_Handler();
   }
+  if (HAL_TIM_IC_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
   sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
   sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
   if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigIC.ICPolarity = TIM_INPUTCHANNELPOLARITY_RISING;
+  sConfigIC.ICSelection = TIM_ICSELECTION_DIRECTTI;
+  sConfigIC.ICPrescaler = TIM_ICPSC_DIV1;
+  sConfigIC.ICFilter = 0;
+  if (HAL_TIM_IC_ConfigChannel(&htim2, &sConfigIC, TIM_CHANNEL_1) != HAL_OK)
   {
     Error_Handler();
   }
@@ -380,7 +422,6 @@ static void MX_TIM3_Init(void)
   TIM_SlaveConfigTypeDef sSlaveConfig = {0};
   TIM_MasterConfigTypeDef sMasterConfig = {0};
   TIM_OC_InitTypeDef sConfigOC = {0};
-  TIM_IC_InitTypeDef sConfigIC = {0};
 
   /* USER CODE BEGIN TIM3_Init 1 */
 
@@ -396,10 +437,6 @@ static void MX_TIM3_Init(void)
     Error_Handler();
   }
   if (HAL_TIM_OC_Init(&htim3) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  if (HAL_TIM_IC_Init(&htim3) != HAL_OK)
   {
     Error_Handler();
   }
@@ -427,23 +464,14 @@ static void MX_TIM3_Init(void)
   {
     Error_Handler();
   }
-  sConfigIC.ICPolarity = TIM_ICPOLARITY_RISING;
-  sConfigIC.ICSelection = TIM_ICSELECTION_DIRECTTI;
-  sConfigIC.ICPrescaler = TIM_ICPSC_DIV1;
-  sConfigIC.ICFilter = 0;
-  if (HAL_TIM_IC_ConfigChannel(&htim3, &sConfigIC, TIM_CHANNEL_2) != HAL_OK)
-  {
-    Error_Handler();
-  }
   /* USER CODE BEGIN TIM3_Init 2 */
-
-
   __HAL_TIM_ENABLE_IT(&htim3, TIM_IT_UPDATE);            // Enable Timer 3 Update Event interrupt for elapsedPeriodCallback
-  __HAL_TIM_ENABLE_IT(&htim3, TIM_IT_CC1);               // Enable Timer 3 Channel 1 interrupt
+  __HAL_TIM_ENABLE_IT(&htim3, TIM_IT_CC1);               // Enable Timer 3 Channel 1 interrupt for elapsedPeriodCallback
+
+  HAL_NVIC_ClearPendingIRQ(TIM3_IRQn);  // make sure that any pending interrupt is cleared
+  HAL_NVIC_EnableIRQ(TIM3_IRQn);  // Enable the interrupt
 
 
-  HAL_NVIC_SetPriority(TIM3_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(TIM3_IRQn);
 
   /* USER CODE END TIM3_Init 2 */
   HAL_TIM_MspPostInit(&htim3);
@@ -497,20 +525,28 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim3){
-	if (htim3->Channel == HAL_TIM_ACTIVE_CHANNEL_2){
-        // TIM3 reached the CCR selected value-- We get the rising edge
+void HAL_TIM_OC_DelayElapsedCallback(TIM_HandleTypeDef *htim){
+	if (htim->Instance == TIM1 || htim->Instance == TIM3) {
+        // TIM reached the CCR selected value-- We get the rising edge
+        HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_samp, SAMPLES);
     	HAL_GPIO_WritePin(GPIOA, Toggle_LED, GPIO_PIN_SET);
-
-    }
+	}
 }
 
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim3){
 
-    	HAL_GPIO_WritePin(GPIOA, Toggle_LED, GPIO_PIN_RESET);
-        // TIM1 reached the ARR value, and will reset
-
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
+	sum +=1;
+	if(sum >2){
+		if (htim->Instance == TIM1 || htim->Instance == TIM3) { //setting an or, so it only stops DMA when its initialized by tim1 or 3, as the Elap also works for tim2
+			// TIM1 or TIM3 reached the ARR value, and will reset
+			HAL_ADC_Stop_DMA(&hadc1);
+			HAL_GPIO_WritePin(GPIOA, Toggle_LED, GPIO_PIN_RESET);
+//			samplesCollected = 0;
+//			sumValues = 0;
+		}
+	}
 }
+
 /* USER CODE END 4 */
 
 /**
