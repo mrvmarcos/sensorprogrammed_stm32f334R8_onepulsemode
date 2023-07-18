@@ -205,7 +205,7 @@ void SystemInit(void)
   *             8 MHz) but the real value may vary depending on the variations
   *             in voltage and temperature.
   *
-  *         (**) HSE_VALUE is a constant defined in stm32f3xx_hal.h file (default value
+  *         (**) HSE_VALUE is a constant defined in stm32f3xx_hal.h fi le (default value
   *              8 MHz), user has to ensure that HSE_VALUE is same as the real
   *              frequency of the crystal used. Otherwise, this function may
   *              have wrong result.

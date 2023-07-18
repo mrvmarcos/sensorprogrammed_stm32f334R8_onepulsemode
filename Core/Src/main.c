@@ -32,9 +32,9 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define SAMPLES 100 //size for our buffer
+#define SAMPLES 82 //size for our buffer
 
-#define Toggle_LED GPIO_PIN_5
+#define Green_LED GPIO_PIN_5
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -50,11 +50,15 @@ TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
 
+UART_HandleTypeDef huart2;
+
 /* USER CODE BEGIN PV */
+uint8_t buf[12];
 uint16_t adc_samp[SAMPLES];
 // uint16_t convCompleted = 0;
-uint16_t samplesCollected = 0;
-uint32_t sumValues = 0;
+static uint32_t new_data_available = 0;
+uint32_t num_usart[SAMPLES];
+uint32_t sum_2 =0;
 uint32_t sum =0;
 
 
@@ -69,6 +73,7 @@ static void MX_TIM2_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_ADC1_Init(void);
+static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -111,16 +116,18 @@ int main(void)
   MX_TIM1_Init();
   MX_TIM3_Init();
   MX_ADC1_Init();
+  MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
 
+  // Enable update interrupt for TIM2
   HAL_TIM_Base_Start(&htim2);
 
-  HAL_TIM_OnePulse_Start(&htim1, TIM_CHANNEL_1);
+  // Enable one-pulse mode and output compare interrupt for TIM1
+  HAL_TIM_OnePulse_Start_IT(&htim1, TIM_CHANNEL_1);
+  //HAL_TIM_OC_Start_IT(&htim1, TIM_CHANNEL_1);
 
-  HAL_TIM_OC_Start_IT(&htim1, TIM_CHANNEL_1);
-
-  HAL_TIM_OnePulse_Start(&htim3, TIM_CHANNEL_1);
-
+  // Enable one-pulse mode and output compare interrupt for TIM3
+  HAL_TIM_OnePulse_Start_IT(&htim3, TIM_CHANNEL_1);
   HAL_TIM_OC_Start_IT(&htim3, TIM_CHANNEL_1);
 
 
@@ -131,15 +138,24 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	   //Process the converted value stored in rawValues
-//	  for (int i = 0; i < 10; i++){
-//	   uint32_t convertedValue = adc_samp[i];
+        if (new_data_available == 1){
+          sum_2 +=1;
+	      HAL_GPIO_WritePin(GPIOA, Green_LED, GPIO_PIN_SET);
+	      for (int i = 0; i < 81; i+=2) {
+	          num_usart[i] += adc_samp[i];
+	      }
+	      if (sum_2 == 16){
+	    	  for (int i = 0; i < 81; i+=2) {
+	    	  sprintf((char*)buf, "%u \r\n", (unsigned int)num_usart[i]);
+	    	  HAL_UART_Transmit(&huart2, buf, strlen((char*)buf), HAL_MAX_DELAY);
+	    	  num_usart[i] = 0;
+	    	  sum_2 = 0;
+	    	  }
+	      }
+	      HAL_GPIO_WritePin(GPIOA, Green_LED, GPIO_PIN_RESET);
+	      new_data_available = 0;
+        }
 
-//	   if (convertedValue > 0) {
-//	   	    sumValues += convertedValue;
-//	    	float average = (float)sumValues / 10;
-	  //}
-	//}
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -283,7 +299,7 @@ static void MX_TIM1_Init(void)
   htim1.Instance = TIM1;
   htim1.Init.Prescaler = 32-1;
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim1.Init.Period = 20-1;
+  htim1.Init.Period = 35-1;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 0;
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
@@ -313,7 +329,7 @@ static void MX_TIM1_Init(void)
     Error_Handler();
   }
   sConfigOC.OCMode = TIM_OCMODE_PWM2;
-  sConfigOC.Pulse = 10-1;
+  sConfigOC.Pulse = 25-1;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
@@ -339,8 +355,8 @@ static void MX_TIM1_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN TIM1_Init 2 */
-  __HAL_TIM_ENABLE_IT(&htim1, TIM_IT_UPDATE);            // Enable Timer 1 Update Event interrupt for elapsedPeriodCallback
-  __HAL_TIM_ENABLE_IT(&htim1, TIM_IT_CC1);               // Enable Timer 1 Channel 1 interrupt for elapsedPeriodCallback
+//  __HAL_TIM_ENABLE_IT(&htim1, TIM_IT_UPDATE);            // Enable Timer 1 Update Event interrupt for elapsedPeriodCallback
+//  __HAL_TIM_ENABLE_IT(&htim1, TIM_IT_CC1);               // Enable Timer 1 Channel 1 interrupt for elapsedPeriodCallback
 
   //HAL_NVIC_ClearPendingIRQ(TIM1_IRQn);  // make sure that any pending interrupt is cleared
   //HAL_NVIC_EnableIRQ(TIM1_IRQn);  // Enable the interrupt
@@ -402,7 +418,8 @@ static void MX_TIM2_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN TIM2_Init 2 */
-
+  __HAL_TIM_ENABLE_IT(&htim2, TIM_IT_UPDATE);            // Enable Timer 3 Update Event interrupt for elapsedPeriodCallback
+  __HAL_TIM_ENABLE_IT(&htim2, TIM_IT_CC1);               // Enable Timer 3 Channel 1 interrupt for elapsedPeriodCallback
   /* USER CODE END TIM2_Init 2 */
 
 }
@@ -429,7 +446,7 @@ static void MX_TIM3_Init(void)
   htim3.Instance = TIM3;
   htim3.Init.Prescaler = 32-1;
   htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim3.Init.Period = 3010-1;
+  htim3.Init.Period = 65-1;
   htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
@@ -457,7 +474,7 @@ static void MX_TIM3_Init(void)
     Error_Handler();
   }
   sConfigOC.OCMode = TIM_OCMODE_PWM2;
-  sConfigOC.Pulse = 3000-1;
+  sConfigOC.Pulse = 55-1;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   if (HAL_TIM_OC_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
@@ -465,8 +482,8 @@ static void MX_TIM3_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN TIM3_Init 2 */
-  __HAL_TIM_ENABLE_IT(&htim3, TIM_IT_UPDATE);            // Enable Timer 3 Update Event interrupt for elapsedPeriodCallback
-  __HAL_TIM_ENABLE_IT(&htim3, TIM_IT_CC1);               // Enable Timer 3 Channel 1 interrupt for elapsedPeriodCallback
+__HAL_TIM_ENABLE_IT(&htim3, TIM_IT_UPDATE);            // Enable Timer 3 Update Event interrupt for elapsedPeriodCallback
+__HAL_TIM_ENABLE_IT(&htim3, TIM_IT_CC1);               // Enable Timer 3 Channel 1 interrupt for elapsedPeriodCallback
 
   HAL_NVIC_ClearPendingIRQ(TIM3_IRQn);  // make sure that any pending interrupt is cleared
   HAL_NVIC_EnableIRQ(TIM3_IRQn);  // Enable the interrupt
@@ -475,6 +492,41 @@ static void MX_TIM3_Init(void)
 
   /* USER CODE END TIM3_Init 2 */
   HAL_TIM_MspPostInit(&htim3);
+
+}
+
+/**
+  * @brief USART2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART2_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART2_Init 0 */
+
+  /* USER CODE END USART2_Init 0 */
+
+  /* USER CODE BEGIN USART2_Init 1 */
+
+  /* USER CODE END USART2_Init 1 */
+  huart2.Instance = USART2;
+  huart2.Init.BaudRate = 38400;
+  huart2.Init.WordLength = UART_WORDLENGTH_8B;
+  huart2.Init.StopBits = UART_STOPBITS_1;
+  huart2.Init.Parity = UART_PARITY_NONE;
+  huart2.Init.Mode = UART_MODE_TX_RX;
+  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
+  huart2.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
+  huart2.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
+  if (HAL_UART_Init(&huart2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART2_Init 2 */
+
+  /* USER CODE END USART2_Init 2 */
 
 }
 
@@ -525,25 +577,27 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-void HAL_TIM_OC_DelayElapsedCallback(TIM_HandleTypeDef *htim){
-	if (htim->Instance == TIM1 || htim->Instance == TIM3) {
-        // TIM reached the CCR selected value-- We get the rising edge
-        HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_samp, SAMPLES);
-    	HAL_GPIO_WritePin(GPIOA, Toggle_LED, GPIO_PIN_SET);
-	}
-}
-
-
+//void HAL_TIM_OC_DelayElapsedCallback(TIM_HandleTypeDef *htim){
+//	if (htim->Instance == TIM3) {
+//    	HAL_GPIO_WritePin(GPIOA, Green_LED, GPIO_PIN_RESET);
+//    	HAL_ADC_Stop_DMA(&hadc1);
+//    	new_data_available = 1;
+//	}
+//}
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 	sum +=1;
 	if(sum >2){
-		if (htim->Instance == TIM1 || htim->Instance == TIM3) { //setting an or, so it only stops DMA when its initialized by tim1 or 3, as the Elap also works for tim2
-			// TIM1 or TIM3 reached the ARR value, and will reset
-			HAL_ADC_Stop_DMA(&hadc1);
-			HAL_GPIO_WritePin(GPIOA, Toggle_LED, GPIO_PIN_RESET);
-//			samplesCollected = 0;
-//			sumValues = 0;
-		}
+	    if (htim->Instance == TIM2)
+	    {
+	        HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_samp, SAMPLES);
+ 	    	//HAL_GPIO_WritePin(GPIOA, Green_LED, GPIO_PIN_SET);
+	    }
+	    else if (htim->Instance == TIM3)
+	    {
+	    	HAL_ADC_Stop_DMA(&hadc1);
+	    	//HAL_GPIO_WritePin(GPIOA, Green_LED, GPIO_PIN_RESET);
+	    	new_data_available = 1;
+	    }
 	}
 }
 
